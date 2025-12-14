@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Christmas Word Hunt</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Mali:wght@400;500;600;700&family=Mountains+of+Christmas:wght@400;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Mali', 'cursive'],
+              display: ['Mountains of Christmas', 'cursive'],
+            },
+            colors: {
+              xmas: {
+                red: '#D42426',
+                green: '#165B33',
+                gold: '#F8B229',
+                snow: '#F8F8F8',
+                darkGreen: '#0B2E1E',
+                night: '#0B1026', // Darker navy
+                midnight: '#1E1B4B'
+              }
+            },
+            animation: {
+              'fly-orbit': 'flyOrbit 30s linear infinite',
+              'pop-up': 'popUp 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
+              'fade-out': 'fadeOut 0.5s ease-out forwards',
+              'chimney-drop': 'chimneyDrop 2.5s ease-in-out forwards',
+              'float': 'float 3s ease-in-out infinite',
+              'twinkle': 'twinkle 2s ease-in-out infinite',
+            },
+            keyframes: {
+              flyOrbit: {
+                '0%': { transform: 'translateX(-100vw) translateY(50px) rotate(5deg) scale(0.8)' },
+                '40%': { transform: 'translateX(30vw) translateY(-50px) rotate(-5deg) scale(0.9)' },
+                '60%': { transform: 'translateX(70vw) translateY(20px) rotate(0deg) scale(0.9)' },
+                '100%': { transform: 'translateX(120vw) translateY(-20px) rotate(5deg) scale(0.8)' },
+              },
+              popUp: {
+                '0%': { transform: 'scale(0) translateY(100%)', opacity: '0' },
+                '100%': { transform: 'scale(1) translateY(0)', opacity: '1' },
+              },
+              fadeOut: {
+                '0%': { opacity: '1' },
+                '100%': { opacity: '0' },
+              },
+              chimneyDrop: {
+                '0%': { transform: 'translateY(-300%) translateX(20px) scale(1)' },
+                '40%': { transform: 'translateY(-10px) translateX(0) scale(1)' },
+                '50%': { transform: 'translateY(-10px) translateX(0) scale(0.9)' },
+                '100%': { transform: 'translateY(200px) translateX(0) scale(0.2)', opacity: '0' },
+              },
+              float: {
+                '0%, 100%': { transform: 'translateY(0)' },
+                '50%': { transform: 'translateY(-10px)' },
+              },
+              twinkle: {
+                '0%, 100%': { opacity: '1', transform: 'scale(1)' },
+                '50%': { opacity: '0.4', transform: 'scale(0.8)' },
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body {
+        overscroll-behavior-y: contain;
+        background-color: #0B1026;
+        color: #F8F8F8;
+      }
+      .glass-card {
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      }
+      /* Snowfall Animation */
+      .snowflake {
+        color: #fff;
+        font-size: 1em;
+        font-family: Arial, sans-serif;
+        text-shadow: 0 0 5px #000;
+        position: fixed;
+        top: -10%;
+        z-index: 1; 
+        user-select: none;
+        cursor: default;
+        animation-name: snowflakes-fall, snowflakes-shake;
+        animation-duration: 10s, 3s;
+        animation-timing-function: linear, ease-in-out;
+        animation-iteration-count: infinite, infinite;
+        animation-play-state: running, running;
+        pointer-events: none;
+      }
+      @keyframes snowflakes-fall {
+        0% { top: -10%; }
+        100% { top: 100%; }
+      }
+      @keyframes snowflakes-shake {
+        0%, 100% { transform: translateX(0); }
+        50% { transform: translateX(80px); }
+      }
+      .snowflake:nth-of-type(0) { left: 1%; animation-delay: 0s, 0s; }
+      .snowflake:nth-of-type(1) { left: 10%; animation-delay: 1s, 1s; }
+      .snowflake:nth-of-type(2) { left: 20%; animation-delay: 6s, .5s; }
+      .snowflake:nth-of-type(3) { left: 30%; animation-delay: 4s, 2s; }
+      .snowflake:nth-of-type(4) { left: 40%; animation-delay: 2s, 2s; }
+      .snowflake:nth-of-type(5) { left: 50%; animation-delay: 8s, 3s; }
+      .snowflake:nth-of-type(6) { left: 60%; animation-delay: 6s, 2s; }
+      .snowflake:nth-of-type(7) { left: 70%; animation-delay: 2.5s, 1s; }
+      .snowflake:nth-of-type(8) { left: 80%; animation-delay: 1s, 0s; }
+      .snowflake:nth-of-type(9) { left: 90%; animation-delay: 3s, 1.5s; }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.33.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.561.0"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+    <div class="snowflakes" aria-hidden="true">
+      <div class="snowflake">❅</div>
+      <div class="snowflake">❆</div>
+      <div class="snowflake">❅</div>
+      <div class="snowflake">❆</div>
+      <div class="snowflake">❅</div>
+      <div class="snowflake">❆</div>
+      <div class="snowflake">❅</div>
+      <div class="snowflake">❆</div>
+      <div class="snowflake">❅</div>
+      <div class="snowflake">❆</div>
+    </div>
+  </body>
+</html>
