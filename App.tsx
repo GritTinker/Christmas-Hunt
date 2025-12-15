@@ -309,7 +309,7 @@ const WordListModal = ({ onClose }: { onClose: () => void }) => {
                     <div className="flex items-center justify-between relative z-10">
                         <div className="flex items-center gap-3">
                             <div className="p-3 bg-white/10 rounded-2xl border border-white/20 backdrop-blur-sm shadow-lg"><List size={32} className="text-xmas-gold" /></div>
-                            <div><h2 className="text-2xl md:text-3xl font-display font-bold text-white drop-shadow-md">คำศัพท์ทั้งหมด</h2><p className="text-xs md:text-sm text-green-200">รายการคำศัพท์ในเกม (แยกตามหมวดหมู่)</p></div>
+                            <div><h2 className="text-2xl md:text-3xl font-display font-bold text-white drop-shadow-md">คำศัพท์ทั้งหมด</h2><p className="text-xs md:text-sm text-green-200">รายการคำศัพท์ในเกม (เฉพาะรายการหลัก)</p></div>
                         </div>
                         <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-full transition-colors text-white"><X size={28} /></button>
                     </div>
@@ -970,7 +970,9 @@ export default function App() {
             sfxVictoryRef.current.currentTime = 0;
             sfxVictoryRef.current.play().catch(e => console.log("SFX play failed"));
         }
-        setGameState(prev => ({ ...prev, score: prev.score + 10, status: 'victory' }));
+        // Score: 10 points base + 1 point for every second left (Time Bonus)
+        const timeBonus = Math.max(0, gameState.timeLeft);
+        setGameState(prev => ({ ...prev, score: prev.score + 10 + timeBonus, status: 'victory' }));
         setShowSantaPopup(true);
         setTimeout(() => setShowSantaPopup(false), 3000);
     } else if (rawInput.length === question.answer.length) {
@@ -992,7 +994,8 @@ export default function App() {
             sfxVictoryRef.current.currentTime = 0;
             sfxVictoryRef.current.play().catch(e => console.log("SFX play failed"));
         }
-        setGameState(prev => ({ ...prev, score: prev.score + 10, status: 'victory' }));
+        const timeBonus = Math.max(0, gameState.timeLeft);
+        setGameState(prev => ({ ...prev, score: prev.score + 10 + timeBonus, status: 'victory' }));
         setShowSantaPopup(true);
         setTimeout(() => setShowSantaPopup(false), 3000);
       } else if (nextInput.length === question.answer.length) {

@@ -1,5 +1,5 @@
 
-import { GoogleGenAI, Content } from "@google/genai";
+import { GoogleGenAI, Content, Type } from "@google/genai";
 import { Question, WordData, ChatMessage } from "../types";
 
 // FALLBACKS – คำศัพท์คริสต์มาส (คำที่นิยม ใช้จริง พบได้บ่อย)
@@ -25,7 +25,7 @@ export const fallbacks: WordData[] = [
   { word: "ดาวคริสต์มาส", hint: "สัญลักษณ์ที่มักอยู่บนยอดต้นไม้ เชื่อมโยงกับการนำทางในเรื่องเล่าทางศาสนา", category: "สัญลักษณ์" },
   { word: "ไฟคริสต์มาส", hint: "ไฟสีสันที่ใช้ประดับบ้านและต้นไม้ สื่อถึงความสดใสและการเฉลิมฉลอง", category: "สัญลักษณ์" },
   { word: "พวงหรีด", hint: "ของตกแต่งรูปวงกลม มักแขวนหน้าประตูบ้านในช่วงเทศกาลปลายปี", category: "สัญลักษณ์" },
-  { word: "กระดิ่ง", hint: "ของประดับที่ให้เสียงใส มักปรากฏทั้งในเพลงและของตกแต่งช่วงคริสต์มาส", category: "สัญลักษณ์" },
+  { word: "กระดิ่ง", hint: "ของประดับที่ให้เสียงใส มักปรากฏในเพลงและของตกแต่งช่วงคริสต์มาส", category: "สัญลักษณ์" },
 
   // ===== สิ่งของ =====
   { word: "ของขวัญ", hint: "สิ่งที่ผู้คนมอบให้กันเพื่อแสดงความปรารถนาดี มักวางไว้ใต้ต้นไม้", category: "สิ่งของ" },
@@ -54,18 +54,66 @@ export const fallbacks: WordData[] = [
   { word: "การแบ่งปัน", hint: "แนวคิดสำคัญของเทศกาลนี้ ที่เน้นการให้และการช่วยเหลือผู้อื่น", category: "คุณค่า" }
 ];
 
-// ใช้ Static List แทนการเรียก API สำหรับเกม
-// รับ usedWords มาเพื่อกรองคำที่ใช้ไปแล้วออก
 export const generateQuestion = async (apiKey: string | undefined, usedWords: string[] = []): Promise<Question | null> => {
+  // 1. Try Google Gemini API First
+  if (apiKey) {
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: `Generate a Thai vocabulary word related to Christmas, Winter, New Year, or Celebration.
+                   The word must NOT be in this list: ${usedWords.slice(-20).join(', ')}.
+                   
+                   Response MUST be JSON object with:
+                   - word: The Thai word (no spaces).
+                   - hint: A clear Thai definition/hint (do not include the word itself).
+                   - category: A short category name in Thai.`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              word: { type: Type.STRING },
+              hint: { type: Type.STRING },
+              category: { type: Type.STRING }
+            },
+            required: ["word", "hint", "category"]
+          }
+        }
+      });
+
+      const data = JSON.parse(response.text || "{}");
+      if (data.word && data.hint) {
+        return {
+          category: data.category || "ทั่วไป",
+          answer: data.word.replace(/\s+/g, ''),
+          hint: data.hint
+        };
+      }
+    } catch (error) {
+      console.warn("Gemini API Error (using fallback):", error);
+    }
+  }
+
+  // 2. Fallback to Static List
   // จำลองความล่าช้าเล็กน้อยให้รู้สึกเหมือนกำลังโหลด (ถ้าต้องการ)
   await new Promise(resolve => setTimeout(resolve, 300));
 
   // กรองคำที่ยังไม่เคยถูกใช้
   const availableWords = fallbacks.filter(item => !usedWords.includes(item.word.replace(/\s+/g, '')));
 
-  // ถ้าไม่มีคำเหลือแล้ว
+  // ถ้าไม่มีคำเหลือแล้ว ให้รีไซเคิลคำจาก fallback เพื่อให้เกมเล่นต่อได้
   if (availableWords.length === 0) {
-    return null;
+      if (fallbacks.length > 0) {
+         const randomRecycle = fallbacks[Math.floor(Math.random() * fallbacks.length)];
+         return {
+             category: randomRecycle.category,
+             answer: randomRecycle.word.replace(/\s+/g, ''),
+             hint: randomRecycle.hint
+         };
+      }
+      return null;
   }
 
   const randomIndex = Math.floor(Math.random() * availableWords.length);
@@ -73,7 +121,7 @@ export const generateQuestion = async (apiKey: string | undefined, usedWords: st
 
   return {
     category: data.category,
-    answer: data.word.replace(/\s+/g, ''), // Ensure no spaces
+    answer: data.word.replace(/\s+/g, ''),
     hint: data.hint
   };
 };
