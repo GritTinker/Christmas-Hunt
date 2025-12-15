@@ -8,7 +8,7 @@ export default defineConfig(({ mode }) => {
     // Base path for GitHub Pages. 
     // If deploying to https://user.github.io/repo/, set this to '/repo/'. 
     // Using './' is a generic relative path fallback.
-    base: './', 
+    base: './',
     define: {
       // Polyfill process.env.API_KEY for the browser
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
