@@ -11,8 +11,7 @@ export default defineConfig(({ mode }) => {
     base: './', 
     define: {
       // Polyfill process.env.API_KEY for the browser
-      // Mapping the specific GitHub Secret 'VITE_GEMINI_API_KEY' to the internal process.env.API_KEY
-      'process.env.API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY)
+      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
     }
   };
 });
