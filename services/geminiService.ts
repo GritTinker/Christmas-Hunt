@@ -1,8 +1,9 @@
+
 import { GoogleGenAI, Content } from "@google/genai";
 import { Question, WordData, ChatMessage } from "../types";
 
 // FALLBACKS – คำศัพท์คริสต์มาส (คำที่นิยม ใช้จริง พบได้บ่อย)
-const fallbacks: WordData[] = [
+export const fallbacks: WordData[] = [
   // ===== ศาสนา =====
   { word: "คริสต์มาส", hint: "เทศกาลสำคัญช่วงปลายปีที่ผู้คนทั่วโลกเฉลิมฉลองร่วมกัน มีทั้งความหมายทางศาสนา การให้ และการรวมตัวของครอบครัว", category: "ศาสนา" },
   { word: "พระเยซู", hint: "บุคคลสำคัญในเรื่องราวทางศาสนาที่เกี่ยวข้องกับวันนี้ เชื่อว่าเป็นผู้ที่ถือกำเนิดขึ้นในช่วงเวลานี้", category: "ศาสนา" },
@@ -34,7 +35,7 @@ const fallbacks: WordData[] = [
   // ===== อาหาร =====
   { word: "เค้กคริสต์มาส", hint: "ขนมหวานที่นิยมรับประทานในเทศกาลนี้ มักทำขึ้นเป็นพิเศษช่วงปลายปี", category: "อาหาร" },
   { word: "ขนมปังขิง", hint: "ขนมอบที่มีกลิ่นเครื่องเทศ นิยมทำเป็นรูปคนหรือบ้านในช่วงคริสต์มาส", category: "อาหาร" },
-  { word: "แคนดี้เคน", hint: "ลูกกวาดแท่งลายสีแดงขาว ที่พบได้บ่อยในของตกแต่งและถุงขนมเทศกาลนี้", category: "อาหาร" },
+  { word: "แคนดี้แคน", hint: "ลูกกวาดแท่งลายสีแดงขาว ที่พบได้บ่อยในของตกแต่งและถุงขนมเทศกาลนี้", category: "อาหาร" },
 
   // ===== เพลง =====
   { word: "เพลงคริสต์มาส", hint: "บทเพลงที่เปิดบ่อยในช่วงปลายปี เนื้อหามักเกี่ยวกับความสุขและการเฉลิมฉลอง", category: "เพลง" },
@@ -123,29 +124,5 @@ export const getSantaResponse = async (
     return response.text || "โฮ่ โฮ่... ซานต้าไม่ได้ยินเสียงเธอเลย ลองพูดอีกทีได้ไหม?";
   } catch (error) {
     return handleApiError(error, "Santa Chat");
-  }
-};
-
-// ฟังก์ชันขอคำใบ้จาก Santa (Dynamic Hint)
-export const generateSantaHint = async (
-  apiKey: string | undefined,
-  word: string,
-  category: string
-): Promise<string> => {
-  if (!apiKey) return "ซานต้ากำลังยุ่งอยู่จ้ะ (No API Key)";
-
-  try {
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: `คำศัพท์คือ "${word}" (หมวดหมู่: ${category}) เด็กๆ กำลังเล่นเกมทายคำแต่ทายไม่ออก ช่วยใบ้คำนี้ให้หน่อย ขอคำใบ้สั้นๆ ง่ายๆ ไม่เกิน 15 คำ และห้ามบอกคำตอบตรงๆ`,
-      config: {
-        systemInstruction: "คุณคือซานตาคลอสที่กำลังช่วยเด็กเล่นเกมทายคำ จงให้คำใบ้ที่อบอุ่น เป็นกันเอง และสั้นกระชับ",
-      }
-    });
-
-    return response.text || "ลองพยายามอีกนิดนะเด็กดี!";
-  } catch (error) {
-    return handleApiError(error, "Santa Hint");
   }
 };
