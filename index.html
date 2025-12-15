@@ -21,7 +21,7 @@
                 gold: '#F8B229',
                 snow: '#F8F8F8',
                 darkGreen: '#0B2E1E',
-                night: '#0B1026', // Darker navy
+                night: '#0B1026', 
                 midnight: '#1E1B4B'
               }
             },
@@ -32,6 +32,11 @@
               'chimney-drop': 'chimneyDrop 2.5s ease-in-out forwards',
               'float': 'float 3s ease-in-out infinite',
               'twinkle': 'twinkle 2s ease-in-out infinite',
+              'shake': 'shake 0.5s cubic-bezier(.36,.07,.19,.97) both',
+              'spin-slow': 'spin 3s linear infinite',
+              'bounce-in': 'bounceIn 0.8s cubic-bezier(0.8, 0, 1, 1)',
+              'fade-in': 'fadeIn 0.5s ease-out forwards',
+              'fade-in-up': 'fadeInUp 0.5s ease-out forwards',
             },
             keyframes: {
               flyOrbit: {
@@ -61,6 +66,26 @@
               twinkle: {
                 '0%, 100%': { opacity: '1', transform: 'scale(1)' },
                 '50%': { opacity: '0.4', transform: 'scale(0.8)' },
+              },
+              shake: {
+                '10%, 90%': { transform: 'translate3d(-1px, 0, 0)' },
+                '20%, 80%': { transform: 'translate3d(2px, 0, 0)' },
+                '30%, 50%, 70%': { transform: 'translate3d(-4px, 0, 0)' },
+                '40%, 60%': { transform: 'translate3d(4px, 0, 0)' }
+              },
+              bounceIn: {
+                '0%': { opacity: '0', transform: 'scale(0.3)' },
+                '50%': { opacity: '1', transform: 'scale(1.05)' },
+                '70%': { transform: 'scale(0.9)' },
+                '100%': { transform: 'scale(1)' }
+              },
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' }
+              },
+              fadeInUp: {
+                '0%': { opacity: '0', transform: 'translateY(20px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' }
               }
             }
           }
@@ -79,6 +104,17 @@
         -webkit-backdrop-filter: blur(12px);
         border: 1px solid rgba(255, 255, 255, 0.1);
         box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      }
+      .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+      }
+      .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+      }
+      .writing-vertical {
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
       }
       /* Snowfall Animation */
       .snowflake {
@@ -117,31 +153,884 @@
       .snowflake:nth-of-type(8) { left: 80%; animation-delay: 1s, 0s; }
       .snowflake:nth-of-type(9) { left: 90%; animation-delay: 3s, 1.5s; }
     </style>
-  <script type="importmap">
+    
+    <!-- ES Modules Import Map -->
+    <script type="importmap">
 {
   "imports": {
     "react": "https://esm.sh/react@^19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "react/": "https://esm.sh/react@^19.2.3/",
+    "react-dom/client": "https://esm.sh/react-dom@^19.2.3/client",
     "@google/genai": "https://esm.sh/@google/genai@^1.33.0",
-    "lucide-react": "https://esm.sh/lucide-react@^0.561.0"
+    "lucide-react": "https://esm.sh/lucide-react@^0.561.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/"
   }
 }
 </script>
-</head>
+
+    <!-- Polyfill for process.env (Required for GoogleGenAI to find API KEY if passed via env) -->
+    <!-- Note: In a real static deployment, you might need to hardcode the key or prompt for it -->
+    <script>
+      window.process = {
+        env: {
+          API_KEY: '' // TODO: ใส่ API Key ของคุณที่นี่ หรือระบบจะทำงานไม่ได้
+        }
+      };
+    </script>
+
+    <!-- Babel Standalone for in-browser JSX compilation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Main Application Logic -->
+    <script type="text/babel" data-type="module" data-presets="typescript,react">
+      import React, { useState, useEffect, useCallback, useRef } from 'react';
+      import ReactDOM from 'react-dom/client';
+      import { GoogleGenAI } from "@google/genai";
+      import { Gift, Snowflake, RefreshCw, Play, Lightbulb, SkipForward, Bell, Cloud, Star, Moon, Volume2, VolumeX, MessageCircle, X, Send, User, BookOpen, ChevronDown, ChevronUp, Calendar, Globe, ExternalLink, History, Palette, Sparkles, Home, Zap, Award, Coins } from 'lucide-react';
+
+      // ==========================================
+      // CONFIG: Audio
+      // ==========================================
+      const AUDIO_CONFIG = {
+        bgm: [
+          "./sounds/bgm/Jingle_Bells.mp3",
+          "./sounds/bgm/We_Wish_You_A_Merry_Christmas.mp3",
+          "./sounds/bgm/Last_Christmas.mp3"
+        ],
+        sfx: {
+          santa: "./sounds/sfx/ho-ho-ho.mp3"
+        }
+      };
+
+      // ==========================================
+      // SERVICE: Gemini & Data
+      // ==========================================
+      
+      const fallbacks = [
+        // ===== ศาสนา =====
+        { word: "คริสต์มาส", hint: "เทศกาลสำคัญช่วงปลายปีที่ผู้คนทั่วโลกเฉลิมฉลองร่วมกัน มีทั้งความหมายทางศาสนา การให้ และการรวมตัวของครอบครัว", category: "ศาสนา" },
+        { word: "พระเยซู", hint: "บุคคลสำคัญในเรื่องราวทางศาสนาที่เกี่ยวข้องกับวันนี้ เชื่อว่าเป็นผู้ที่ถือกำเนิดขึ้นในช่วงเวลานี้", category: "ศาสนา" },
+        { word: "พระคริสต์", hint: "พระนามที่ใช้เรียกบุคคลเดียวกับพระเยซู โดยมีความหมายเกี่ยวข้องกับการเป็นผู้ไถ่ตามความเชื่อ", category: "ศาสนา" },
+        { word: "การประสูติ", hint: "เหตุการณ์การถือกำเนิดของบุคคลสำคัญ ซึ่งเป็นจุดเริ่มต้นของเรื่องราวในวันสำคัญนี้", category: "ศาสนา" },
+        { word: "รางหญ้า", hint: "สถานที่เรียบง่ายที่มักปรากฏในฉากเล่าเรื่องเกี่ยวกับการกำเนิดในวันคริสต์มาส", category: "ศาสนา" },
+        { word: "ทูตสวรรค์", hint: "ผู้ส่งสารในเรื่องราวทางศาสนา มักปรากฏในภาพหรือการแสดงเกี่ยวกับวันคริสต์มาส", category: "ศาสนา" },
+        // ===== ตัวละคร =====
+        { word: "ซานตาคลอส", hint: "ตัวละครในวัฒนธรรมสมัยใหม่ ใส่ชุดสีแดง มีเคราขาว และเกี่ยวข้องกับการนำของขวัญมาให้เด็ก ๆ", category: "ตัวละคร" },
+        { word: "ซานต้า", hint: "ชื่อเรียกสั้น ๆ ของตัวละครแจกของขวัญ ที่เด็ก ๆ มักเขียนจดหมายถึง", category: "ตัวละคร" },
+        { word: "กวางเรนเดียร์", hint: "สัตว์ที่มักถูกเล่าเรื่องว่าใช้ลากพาหนะของซานต้าในคืนพิเศษเพียงคืนเดียว", category: "ตัวละคร" },
+        { word: "รูดอล์ฟ", hint: "กวางตัวหนึ่งที่โดดเด่นจากตัวอื่น เพราะมีลักษณะพิเศษที่ช่วยนำทางในคืนที่มืด", category: "ตัวละคร" },
+        { word: "เอลฟ์", hint: "ตัวละครขนาดเล็กในเรื่องเล่า ทำหน้าที่ช่วยเหลือซานต้าในการเตรียมของขวัญ", category: "ตัวละคร" },
+        { word: "มนุษย์หิมะ", hint: "ตัวละครที่เกิดจากการปั้นในฤดูหนาว มักปรากฏในภาพและสื่อช่วงคริสต์มาส", category: "ตัวละคร" },
+        // ===== สัญลักษณ์ =====
+        { word: "ต้นคริสต์มาส", hint: "ต้นไม้ที่ถูกนำมาตกแต่งด้วยไฟและของประดับ กลายเป็นจุดศูนย์กลางของการเฉลิมฉลอง", category: "สัญลักษณ์" },
+        { word: "ดาวคริสต์มาส", hint: "สัญลักษณ์ที่มักอยู่บนยอดต้นไม้ เชื่อมโยงกับการนำทางในเรื่องเล่าทางศาสนา", category: "สัญลักษณ์" },
+        { word: "ไฟคริสต์มาส", hint: "ไฟสีสันที่ใช้ประดับบ้านและต้นไม้ สื่อถึงความสดใสและการเฉลิมฉลอง", category: "สัญลักษณ์" },
+        { word: "พวงหรีด", hint: "ของตกแต่งรูปวงกลม มักแขวนหน้าประตูบ้านในช่วงเทศกาลปลายปี", category: "สัญลักษณ์" },
+        { word: "กระดิ่ง", hint: "ของประดับที่ให้เสียงใส มักปรากฏทั้งในเพลงและของตกแต่งช่วงคริสต์มาส", category: "สัญลักษณ์" },
+        // ===== สิ่งของ =====
+        { word: "ของขวัญ", hint: "สิ่งที่ผู้คนมอบให้กันเพื่อแสดงความปรารถนาดี มักวางไว้ใต้ต้นไม้", category: "สิ่งของ" },
+        { word: "กล่องของขวัญ", hint: "ภาชนะที่ใช้บรรจุของขวัญ มักถูกห่ออย่างสวยงามเพื่อสร้างความตื่นเต้น", category: "สิ่งของ" },
+        { word: "ถุงเท้าคริสต์มาส", hint: "ของตกแต่งที่แขวนไว้ตามผนังหรือเตาผิง โดยเชื่อว่าจะมีของเล็ก ๆ อยู่ข้างใน", category: "สิ่งของ" },
+        // ===== อาหาร =====
+        { word: "เค้กคริสต์มาส", hint: "ขนมหวานที่นิยมรับประทานในเทศกาลนี้ มักทำขึ้นเป็นพิเศษช่วงปลายปี", category: "อาหาร" },
+        { word: "ขนมปังขิง", hint: "ขนมอบที่มีกลิ่นเครื่องเทศ นิยมทำเป็นรูปคนหรือบ้านในช่วงคริสต์มาส", category: "อาหาร" },
+        { word: "แคนดี้เคน", hint: "ลูกกวาดแท่งลายสีแดงขาว ที่พบได้บ่อยในของตกแต่งและถุงขนมเทศกาลนี้", category: "อาหาร" },
+        // ===== เพลง =====
+        { word: "เพลงคริสต์มาส", hint: "บทเพลงที่เปิดบ่อยในช่วงปลายปี เนื้อหามักเกี่ยวกับความสุขและการเฉลิมฉลอง", category: "เพลง" },
+        { word: "จิงเกิลเบล", hint: "เพลงจังหวะสนุกที่มีเสียงกระดิ่ง และเป็นหนึ่งในเพลงที่คนทั่วโลกรู้จัก", category: "เพลง" },
+        // ===== กิจกรรม =====
+        { word: "แลกของขวัญ", hint: "กิจกรรมที่ผู้คนเตรียมสิ่งของให้กันและกัน เพื่อสร้างความสนุกและรอยยิ้ม", category: "กิจกรรม" },
+        { word: "ตกแต่งบ้าน", hint: "การจัดบ้านด้วยไฟและของประดับ เพื่อสร้างบรรยากาศพิเศษในช่วงเทศกาล", category: "กิจกรรม" },
+        // ===== บรรยากาศ =====
+        { word: "ฤดูหนาว", hint: "ช่วงเวลาของปีที่อากาศเย็นในหลายประเทศ และเป็นช่วงที่ตรงกับเทศกาลนี้", category: "บรรยากาศ" },
+        { word: "หิมะ", hint: "ปรากฏการณ์ธรรมชาติสีขาว ที่มักถูกใช้แทนภาพจำของคริสต์มาส", category: "บรรยากาศ" },
+        // ===== คุณค่า =====
+        { word: "ความรัก", hint: "คุณค่าที่มักถูกพูดถึงในช่วงคริสต์มาส ผ่านการดูแลและห่วงใยกัน", category: "คุณค่า" },
+        { word: "การแบ่งปัน", hint: "แนวคิดสำคัญของเทศกาลนี้ ที่เน้นการให้และการช่วยเหลือผู้อื่น", category: "คุณค่า" }
+      ];
+
+      const generateQuestion = async (apiKey, usedWords = []) => {
+        await new Promise(resolve => setTimeout(resolve, 300));
+        const availableWords = fallbacks.filter(item => !usedWords.includes(item.word.replace(/\s+/g, '')));
+        if (availableWords.length === 0) return null;
+        const randomIndex = Math.floor(Math.random() * availableWords.length);
+        const data = availableWords[randomIndex];
+        return {
+          category: data.category,
+          answer: data.word.replace(/\s+/g, ''),
+          hint: data.hint
+        };
+      };
+
+      const handleApiError = (error, context) => {
+        console.error(`${context} Error:`, error);
+        if (error?.status === 429 || error?.toString().includes('429')) {
+          return "โฮ่ โฮ่! ตอนนี้ซานต้ายุ่งมาก (โควต้าเต็ม) ลองพยายามด้วยตัวเองนะเด็กดี!";
+        }
+        return "โฮ่ โฮ่... สัญญาณจากขั้วโลกเหนือขาดหายไป (เกิดข้อผิดพลาด)";
+      };
+
+      const getSantaResponse = async (apiKey, history, newMessage) => {
+        if (!apiKey) return "โฮ่ โฮ่ โฮ่! ดูเหมือนว่ากุญแจ API จะหายไปนะเด็กน้อย (กรุณาใส่ API Key)";
+        try {
+          const ai = new GoogleGenAI({ apiKey });
+          let contents = history.map(msg => ({ role: msg.role, parts: [{ text: msg.text }] }));
+          contents.push({ role: 'user', parts: [{ text: newMessage }] });
+          const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: contents,
+            config: {
+              systemInstruction: "คุณคือซานตาคลอส บุคลิก: ชายชราใจดี ร่าเริง (ชอบหัวเราะ โฮ่ โฮ่ โฮ่) มีเมตตา ชอบช่วยเหลือผู้อื่น รูปร่างท้วม เคราขาว สวมชุดสีแดง มีนิสัยรักเด็ก ชอบมอบของขวัญ และเป็นผู้รอบรู้เรื่องเด็กดี-เด็กดื้อทั่วโลก แต่ก็มีมุมเข้มแข็งเมื่อจำเป็นต้องปกป้องเด็กๆ หน้าที่ของคุณคือพูดคุยกับผู้ใช้งาน ตอบคำถามเกี่ยวกับวันคริสต์มาส หรือให้กำลังใจ ให้ใช้ภาษาไทยที่อบอุ่นและเป็นกันเอง **สำคัญ: ตอบให้สั้น กระชับ ได้ใจความ ไม่ต้องพิมพ์ยาวมาก เพื่อให้เด็กๆ อ่านง่าย**",
+            }
+          });
+          return response.text || "โฮ่ โฮ่... ซานต้าไม่ได้ยินเสียงเธอเลย ลองพูดอีกทีได้ไหม?";
+        } catch (error) {
+          return handleApiError(error, "Santa Chat");
+        }
+      };
+
+      const generateSantaHint = async (apiKey, word, category) => {
+        if (!apiKey) return "ซานต้ากำลังยุ่งอยู่จ้ะ (No API Key)";
+        try {
+          const ai = new GoogleGenAI({ apiKey });
+          const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: `คำศัพท์คือ "${word}" (หมวดหมู่: ${category}) เด็กๆ กำลังเล่นเกมทายคำแต่ทายไม่ออก ช่วยใบ้คำนี้ให้หน่อย ขอคำใบ้สั้นๆ ง่ายๆ ไม่เกิน 15 คำ และห้ามบอกคำตอบตรงๆ`,
+            config: {
+              systemInstruction: "คุณคือซานตาคลอสที่กำลังช่วยเด็กเล่นเกมทายคำ จงให้คำใบ้ที่อบอุ่น เป็นกันเอง และสั้นกระชับ",
+            }
+          });
+          return response.text || "ลองพยายามอีกนิดนะเด็กดี!";
+        } catch (error) {
+          return handleApiError(error, "Santa Hint");
+        }
+      };
+
+      // ==========================================
+      // COMPONENT: Timer
+      // ==========================================
+      const Timer = ({ timeLeft, totalTime }) => {
+        const radius = 50;
+        const stroke = 8;
+        const normalizedRadius = 45;
+        const circumference = normalizedRadius * 2 * Math.PI;
+        const strokeDashoffset = circumference - (timeLeft / totalTime) * circumference;
+
+        let strokeColor = "stroke-xmas-green";
+        let textColor = "text-xmas-green";
+        if (timeLeft / totalTime < 0.3) {
+            strokeColor = "stroke-xmas-red";
+            textColor = "text-xmas-red";
+        } else if (timeLeft / totalTime < 0.6) {
+            strokeColor = "stroke-xmas-gold";
+            textColor = "text-yellow-600";
+        }
+
+        return (
+          <div className="relative flex items-center justify-center w-32 h-32 md:w-40 md:h-40">
+            <div className="absolute w-full h-full rounded-full border-4 border-white/30 bg-black/20 backdrop-blur-sm"></div>
+            <div className="absolute inset-0 flex items-center justify-center p-1">
+              <svg height="100%" width="100%" viewBox={`0 0 ${radius * 2} ${radius * 2}`} className="transform -rotate-90 drop-shadow-md overflow-visible">
+                <circle stroke="rgba(255,255,255,0.2)" strokeWidth={stroke} fill="transparent" r={normalizedRadius} cx={radius} cy={radius} />
+                <circle className={`${strokeColor} transition-all duration-1000 ease-linear`} strokeWidth={stroke} strokeDasharray={circumference + ' ' + circumference} style={{ strokeDashoffset }} strokeLinecap="round" fill="transparent" r={normalizedRadius} cx={radius} cy={radius} />
+              </svg>
+            </div>
+            <div className={`absolute z-20 flex flex-col items-center justify-center`}>
+              <div className={`text-4xl md:text-5xl font-bold ${textColor} drop-shadow-sm`}>{timeLeft}</div>
+              <div className="text-[10px] text-slate-300 font-bold uppercase tracking-tighter">วินาที</div>
+            </div>
+            <div className="absolute -top-4 z-30 text-xmas-red drop-shadow-md filter drop-shadow-lg">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" className="transform rotate-12">
+                 <path d="M12 2C12 2 10 6 8 6C6 6 2 4 2 8C2 11 6 12 8 12C10 12 12 10 12 10C12 10 14 12 16 12C18 12 22 11 22 8C22 4 18 6 16 6C14 6 12 2 12 2Z" />
+              </svg>
+            </div>
+          </div>
+        );
+      };
+
+      // ==========================================
+      // COMPONENT: LetterDisplay
+      // ==========================================
+      const LetterDisplay = ({ maskedWord, userInput, isWrong, status }) => {
+        return (
+          <div className="flex flex-wrap justify-center gap-3 md:gap-4 my-6">
+            {maskedWord.map((charData, index) => {
+              const isUserTyped = index < userInput.length;
+              const userChar = isUserTyped ? userInput[index] : '';
+              let displayChar = '';
+              if (isUserTyped) displayChar = userChar;
+              else if (charData.isVisible) displayChar = charData.char;
+
+              let bgColor = "bg-xmas-green"; 
+              let borderColor = "border-b-4 border-xmas-darkGreen";
+              let textColor = "text-white";
+              let ribbonColor = "bg-xmas-red";
+
+              if (charData.isVisible && !isUserTyped) {
+                bgColor = "bg-xmas-gold"; 
+                borderColor = "border-b-4 border-orange-600";
+                textColor = "text-red-800";
+                ribbonColor = "bg-white/50";
+              } else if (isUserTyped) {
+                 bgColor = "bg-white";
+                 borderColor = "border-b-4 border-slate-300";
+                 textColor = "text-xmas-red";
+                 ribbonColor = "bg-xmas-green/20";
+                 if (charData.isVisible && userChar !== charData.char) {
+                     bgColor = "bg-xmas-red";
+                     borderColor = "border-b-4 border-red-900";
+                     textColor = "text-white";
+                     ribbonColor = "bg-black/20";
+                 }
+              }
+              if (status === 'victory') {
+                   bgColor = "bg-xmas-gold";
+                   borderColor = "border-yellow-600";
+                   textColor = "text-xmas-red";
+                   ribbonColor = "bg-white";
+              }
+              if (isWrong) {
+                  bgColor = "bg-xmas-red";
+                  borderColor = "border-red-900";
+                  textColor = "text-white";
+              }
+
+              return (
+                <div key={index} className={`relative w-14 h-18 md:w-20 md:h-24 flex items-center justify-center text-3xl md:text-5xl font-bold rounded-lg shadow-lg ${borderColor} transition-all duration-200 ${bgColor} ${textColor} ${isWrong ? 'animate-shake' : ''} overflow-hidden`}>
+                  <div className={`absolute inset-y-0 left-1/2 w-2 md:w-4 -translate-x-1/2 ${ribbonColor} opacity-80 pointer-events-none`}></div>
+                   <div className={`absolute inset-x-0 top-1/2 h-1 md:h-2 -translate-y-1/2 ${ribbonColor} opacity-60 pointer-events-none`}></div>
+                  <span className="relative z-10 drop-shadow-sm">{displayChar}</span>
+                </div>
+              );
+            })}
+          </div>
+        );
+      };
+
+      // ==========================================
+      // COMPONENT: App
+      // ==========================================
+      
+      // Vector Arts
+      const HouseArt = () => (
+        <div className="relative w-32 h-24 md:w-48 md:h-32 transform scale-75 md:scale-100">
+          <div id="chimney-target" className="absolute -top-6 right-6 w-8 h-12 bg-red-800 border-2 border-red-950 z-10">
+             <div className="w-full h-3 bg-white top-0 absolute rounded-sm shadow-sm"></div>
+             <div className="absolute -top-10 left-1/2 -translate-x-1/2">
+                <Cloud className="w-4 h-4 text-white/40 animate-bounce delay-100" fill="currentColor" />
+                <Cloud className="w-6 h-6 text-white/30 animate-bounce -mt-2" fill="currentColor" />
+             </div>
+          </div>
+          <div className="absolute -top-6 -left-2 w-[110%] h-14 bg-white skew-x-12 rounded-lg z-20 shadow-md border-b-4 border-slate-200"></div>
+          <div className="absolute top-2 left-0 w-full h-full bg-[#5D4037] z-10 flex items-end justify-between px-4 pb-0 rounded-sm shadow-lg">
+              <div className="w-10 h-16 bg-[#3E2723] rounded-t-full border-2 border-[#281815] relative">
+                 <div className="w-1.5 h-1.5 bg-yellow-500 rounded-full absolute top-8 right-1 shadow-[0_0_5px_rgba(234,179,8,0.8)]"></div>
+              </div>
+              <div className="w-12 h-10 bg-yellow-600 border-4 border-[#3E2723] mb-4 grid grid-cols-2 shadow-[0_0_15px_rgba(234,179,8,0.6)]">
+                  <div className="bg-yellow-300/80 animate-pulse"></div>
+                  <div className="bg-yellow-300/90"></div>
+              </div>
+          </div>
+        </div>
+      );
+      const ChurchArt = () => (
+          <div className="relative w-24 h-32 md:w-32 md:h-40 flex flex-col items-center transform scale-75 md:scale-100">
+              <div className="w-0 h-0 border-l-[35px] border-l-transparent border-r-[35px] border-r-transparent border-b-[70px] border-b-[#475569] relative z-20 drop-shadow-lg">
+                   <div className="absolute -top-2 -left-0.5 w-1 h-3 bg-yellow-400"></div>
+              </div>
+              <div className="w-28 h-24 bg-[#64748b] relative z-10 flex justify-center items-end pb-0 shadow-lg">
+                   <div className="absolute -top-3 w-32 h-6 bg-white rounded-full border-b-2 border-slate-300"></div>
+                   <div className="w-10 h-14 bg-[#331c11] rounded-t-full relative top-0 border border-slate-700"></div>
+                   <div className="absolute top-6 left-3 w-5 h-10 bg-yellow-400 rounded-t-full shadow-[0_0_10px_rgba(250,204,21,0.5)] border-2 border-slate-700"></div>
+                   <div className="absolute top-6 right-3 w-5 h-10 bg-yellow-400 rounded-t-full shadow-[0_0_10px_rgba(250,204,21,0.5)] border-2 border-slate-700"></div>
+              </div>
+          </div>
+      );
+      const PineTree = ({ scale = 1, withLights = false }) => (
+          <div className="relative flex flex-col items-center" style={{ transform: `scale(${scale})` }}>
+              {withLights && <Star className="absolute -top-6 text-yellow-300 w-8 h-8 animate-spin-slow drop-shadow-[0_0_10px_rgba(253,224,71,0.8)] z-30" fill="currentColor" />}
+              <div className="w-0 h-0 border-l-[25px] border-l-transparent border-r-[25px] border-r-transparent border-b-[40px] border-b-[#0f3923] relative z-20 -mb-4 drop-shadow-sm">
+                   <div className="absolute top-6 -left-3 w-1 h-1 bg-white rounded-full opacity-60"></div>
+              </div>
+              <div className="w-0 h-0 border-l-[35px] border-l-transparent border-r-[35px] border-r-transparent border-b-[50px] border-b-[#165B33] relative z-10 -mb-4 drop-shadow-sm">
+                   {withLights && (
+                      <>
+                        <div className="absolute top-8 left-2 w-2 h-2 bg-red-400 rounded-full animate-pulse"></div>
+                        <div className="absolute top-6 -left-4 w-2 h-2 bg-yellow-400 rounded-full animate-pulse delay-75"></div>
+                        <div className="absolute top-4 -left-2 w-full h-10 border-b-2 border-yellow-400/30 rounded-full rotate-12 pointer-events-none"></div>
+                      </>
+                   )}
+              </div>
+              <div className="w-0 h-0 border-l-[45px] border-l-transparent border-r-[45px] border-r-transparent border-b-[60px] border-b-[#0f3923] relative z-0 drop-shadow-sm">
+                   {withLights && (
+                      <>
+                        <div className="absolute top-8 -left-2 w-2 h-2 bg-blue-400 rounded-full animate-pulse delay-150"></div>
+                        <div className="absolute top-10 right-4 w-2 h-2 bg-red-400 rounded-full animate-pulse delay-300"></div>
+                         <div className="absolute top-4 left-6 w-2 h-2 bg-yellow-400 rounded-full animate-pulse delay-500"></div>
+                      </>
+                   )}
+              </div>
+              <div className="w-6 h-8 bg-[#3E2723] -mt-1"></div>
+              {withLights && (
+                  <div className="absolute bottom-0 flex gap-1 z-20">
+                      <Gift className="w-6 h-6 text-red-600 fill-current" />
+                      <Gift className="w-5 h-5 text-yellow-500 fill-current" />
+                  </div>
+              )}
+          </div>
+      );
+      const SantaSleigh = () => (
+          <div className="relative flex items-end">
+              <div className="relative z-20 mr-2">
+                   <div className="absolute -top-5 left-2 w-6 h-8 bg-red-600 rounded-t-full flex justify-center items-start">
+                        <div className="w-full h-2 bg-white mt-2"></div>
+                        <div className="absolute -top-1 -right-1 w-3 h-3 bg-white rounded-full"></div> 
+                        <div className="absolute top-2 w-4 h-3 bg-[#ffe0bd] rounded-full"></div> 
+                        <div className="absolute top-4 w-6 h-4 bg-white rounded-full shadow-sm"></div> 
+                   </div>
+                   <div className="w-16 h-8 bg-red-800 rounded-b-2xl rounded-tr-xl border-t-2 border-yellow-500 relative overflow-hidden shadow-sm">
+                      <div className="absolute inset-0 bg-black/10"></div>
+                   </div>
+                   <div className="absolute -bottom-2 -left-1 w-20 h-1 bg-slate-300 rounded-full rotate-[-5deg]">
+                       <div className="absolute left-0 -top-2 w-1 h-3 bg-slate-300"></div>
+                       <div className="absolute right-4 -top-2 w-1 h-3 bg-slate-300"></div>
+                   </div>
+                   <div className="absolute -top-3 right-1 w-4 h-4 bg-green-600 rounded-sm rotate-12 z-[-1]"></div>
+              </div>
+              <div className="w-12 h-[1px] bg-white/60 absolute bottom-5 left-[3.5rem] rotate-[-10deg] z-0"></div>
+              <div className="flex gap-1 relative z-10 ml-4">
+                 {[1, 2].map((i) => (
+                   <div key={i} className="relative w-8 h-6 bg-[#5D4037] rounded-lg">
+                      <div className="absolute -top-2 right-0 w-4 h-4 bg-[#5D4037] rounded-full">
+                         <div className="absolute -top-3 right-0 w-1 h-4 bg-[#3E2723] rotate-45"></div>
+                         <div className="absolute -top-3 right-2 w-1 h-4 bg-[#3E2723] -rotate-12"></div>
+                         {i === 2 && <div className="absolute top-1 right-[-2px] w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse shadow-[0_0_5px_red]"></div>}
+                      </div>
+                      <div className="absolute bottom-[-4px] left-1 w-1 h-3 bg-[#3E2723] animate-pulse"></div>
+                      <div className="absolute bottom-[-4px] right-2 w-1 h-3 bg-[#3E2723] animate-pulse delay-75"></div>
+                   </div>
+                 ))}
+              </div>
+          </div>
+      );
+      const ScenicBackground = () => (
+        <div className="fixed inset-0 w-full h-full z-0 overflow-hidden bg-[#0B1026]">
+          <div className="absolute inset-0 bg-gradient-to-b from-[#020617] via-[#0B1026] to-[#1e293b]"></div>
+          {[...Array(20)].map((_, i) => (
+              <div key={i} className="absolute rounded-full bg-white animate-twinkle" style={{
+                  top: `${Math.random() * 50}%`,
+                  left: `${Math.random() * 100}%`,
+                  width: Math.random() > 0.5 ? '2px' : '3px',
+                  height: Math.random() > 0.5 ? '2px' : '3px',
+                  animationDelay: `${Math.random() * 2}s`
+              }}></div>
+          ))}
+          <div className="absolute top-[5%] left-1/2 -translate-x-1/2 w-48 h-48 md:w-64 md:h-64 bg-[#FDF6E3] rounded-full shadow-[0_0_120px_40px_rgba(253,246,227,0.5)] z-0">
+              <div className="absolute inset-0 rounded-full opacity-20 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]"></div>
+          </div>
+          <div className="absolute top-[20%] left-0 w-full z-10 animate-fly-orbit opacity-90 pointer-events-none">
+              <div className="flex items-center justify-center transform scale-75 md:scale-100">
+                   <SantaSleigh />
+              </div>
+          </div>
+          <div className="absolute bottom-0 left-0 w-full h-[45%] z-10">
+              <svg viewBox="0 0 1440 320" className="absolute bottom-0 w-full h-full text-[#1e293b] fill-current" preserveAspectRatio="none">
+                  <path d="M0,160 C320,300, 420,0, 740,160 C1060,320, 1340,60, 1440,120 V320 H0 Z"></path>
+              </svg>
+          </div>
+          <div className="absolute bottom-0 left-0 w-full h-[35%] z-20">
+              <svg viewBox="0 0 1440 320" className="absolute bottom-0 w-full h-full text-[#94a3b8] fill-current" preserveAspectRatio="none">
+                  <path d="M0,192 C220,100, 500,250, 800,150 C1100,50, 1300,200, 1440,100 V320 H0 Z"></path>
+              </svg>
+              <div className="absolute bottom-[25%] left-[10%] md:left-[15%]"><HouseArt /></div>
+              <div className="absolute bottom-[35%] right-[5%] md:right-[15%]"><ChurchArt /></div>
+              <div className="absolute bottom-[28%] left-[5%] transform scale-75"><PineTree scale={0.8} /></div>
+              <div className="absolute bottom-[32%] left-[28%] transform scale-50"><PineTree scale={0.6} /></div>
+              <div className="absolute bottom-[40%] right-[25%] transform scale-75"><PineTree scale={0.8} /></div>
+          </div>
+          <div className="absolute bottom-0 left-0 w-full h-[20%] z-30">
+              <svg viewBox="0 0 1440 320" className="absolute bottom-0 w-full h-full text-[#f1f5f9] fill-current drop-shadow-lg" preserveAspectRatio="none">
+                   <path d="M0,128 C300,250, 600,0, 900,150 C1200,300, 1380,100, 1440,160 V320 H0 Z"></path>
+              </svg>
+              <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 transform scale-125 md:scale-150 z-40">
+                   <PineTree scale={1.5} withLights={true} />
+              </div>
+              <div className="absolute bottom-0 left-0 transform scale-100"><PineTree scale={1.2} /></div>
+              <div className="absolute bottom-4 right-4 transform scale-110"><PineTree scale={1.3} /></div>
+          </div>
+        </div>
+      );
+      const CutsceneOverlay = ({ onComplete }) => {
+          useEffect(() => {
+              const timer = setTimeout(onComplete, 2500); 
+              return () => clearTimeout(timer);
+          }, [onComplete]);
+          return (
+              <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+                  <div className="absolute inset-0 bg-black/60 animate-fade-out delay-[2s]"></div>
+                  <div className="absolute bottom-[35%] left-[15%] w-20 h-20 md:w-32 md:h-32 flex flex-col items-center">
+                       <div className="animate-chimney-drop text-red-600 relative z-50 filter drop-shadow-2xl">
+                           <Gift size={64} fill="#D42426" stroke="white" strokeWidth={1.5} />
+                           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-full p-1">
+                              <div className="w-2 h-2 bg-black rounded-full"></div>
+                           </div>
+                       </div>
+                       <div className="absolute -top-32 w-48 text-center text-white font-display text-xl animate-pulse shadow-black drop-shadow-md">...Santa is landing...</div>
+                  </div>
+              </div>
+          );
+      };
+      const VictorySanta = () => (
+          <div className="fixed bottom-0 left-1/2 transform -translate-x-1/2 z-50 animate-pop-up">
+              <div className="relative w-64 h-64 md:w-80 md:h-80">
+                  <div className="absolute -top-16 -right-10 bg-white p-4 rounded-2xl rounded-bl-none shadow-xl border-4 border-xmas-red transform rotate-6 animate-bounce">
+                      <span className="text-3xl font-display font-bold text-xmas-red">โฮ่ โฮ่ โฮ่!</span>
+                  </div>
+                  <div className="w-full h-full flex flex-col items-center justify-end drop-shadow-2xl">
+                       <div className="w-40 h-48 bg-red-600 rounded-t-full relative shadow-inner">
+                            <div className="w-32 h-32 bg-pink-200 rounded-full absolute top-4 left-4 z-10">
+                                <div className="w-full h-1/2 bg-white absolute bottom-0 rounded-b-full border-t border-slate-100 shadow-sm"></div>
+                                <div className="w-4 h-4 bg-red-300 rounded-full absolute top-14 left-1/2 -translate-x-1/2 z-20 shadow-sm"></div>
+                                <div className="flex gap-8 justify-center mt-10">
+                                    <div className="w-3 h-3 bg-black rounded-full"></div>
+                                    <div className="w-3 h-3 bg-black rounded-full"></div>
+                                </div>
+                            </div>
+                            <div className="absolute -top-10 left-0 w-40 h-20 bg-red-600 rounded-t-full z-20">
+                                <div className="absolute bottom-0 w-full h-6 bg-white"></div>
+                                <div className="absolute -right-6 top-10 w-12 h-12 bg-white rounded-full shadow-sm"></div>
+                            </div>
+                       </div>
+                  </div>
+              </div>
+          </div>
+      );
+      const GameCompletedView = ({ onBackToMenu }) => (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+              <div className="absolute inset-0 bg-black/40"></div>
+              <div className="relative z-50 flex flex-col items-center animate-pop-up">
+                   <div className="relative w-72 h-72 md:w-96 md:h-96">
+                      <div className="absolute -top-20 right-0 left-0 mx-auto w-64 bg-white p-6 rounded-3xl shadow-2xl border-4 border-xmas-red transform -rotate-2 animate-float text-center z-50">
+                          <h2 className="text-3xl font-display font-bold text-xmas-red mb-2">โฮ่ โฮ่ โฮ่</h2>
+                          <p className="text-slate-800 font-bold text-xl">เกมจบแล้วจ้า~</p>
+                          <p className="text-slate-500 text-sm mt-1">เก่งมากเด็กดี!</p>
+                          <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[15px] border-l-transparent border-r-[15px] border-r-transparent border-t-[20px] border-t-xmas-red"></div>
+                      </div>
+                      <div className="w-full h-full flex flex-col items-center justify-end drop-shadow-2xl mt-10">
+                           <div className="w-56 h-64 bg-red-600 rounded-t-full relative shadow-inner">
+                                <div className="w-44 h-44 bg-pink-200 rounded-full absolute top-6 left-6 z-10">
+                                    <div className="w-full h-1/2 bg-white absolute bottom-0 rounded-b-full border-t border-slate-100 shadow-sm"></div>
+                                    <div className="w-6 h-6 bg-red-300 rounded-full absolute top-20 left-1/2 -translate-x-1/2 z-20 shadow-sm"></div>
+                                    <div className="flex gap-10 justify-center mt-14">
+                                        <div className="w-4 h-4 bg-black rounded-full"></div>
+                                        <div className="w-4 h-4 bg-black rounded-full"></div>
+                                    </div>
+                                </div>
+                                <div className="absolute -top-14 left-0 w-56 h-28 bg-red-600 rounded-t-full z-20">
+                                    <div className="absolute bottom-0 w-full h-8 bg-white"></div>
+                                    <div className="absolute -right-8 top-14 w-16 h-16 bg-white rounded-full shadow-sm"></div>
+                                </div>
+                           </div>
+                      </div>
+                   </div>
+                   <button onClick={onBackToMenu} className="mt-8 px-8 py-3 bg-white text-xmas-red rounded-full font-bold shadow-[0_0_20px_rgba(255,255,255,0.4)] hover:bg-slate-100 hover:scale-105 transition-all flex items-center gap-2 border-2 border-red-200">
+                      <Home size={20} /> กลับหน้าเริ่มต้น
+                   </button>
+              </div>
+          </div>
+      );
+      const SantaChat = ({ isOpen, onClose }) => {
+          const [messages, setMessages] = useState([{ role: 'model', text: 'โฮ่ โฮ่ โฮ่! สวัสดีจ้ะเด็กน้อย มีเรื่องอะไรอยากถามซานต้าเกี่ยวกับวันคริสต์มาสไหม?' }]);
+          const [input, setInput] = useState('');
+          const [isTyping, setIsTyping] = useState(false);
+          const messagesEndRef = useRef(null);
+          const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+          useEffect(() => scrollToBottom(), [messages, isOpen]);
+          const handleSend = async () => {
+              if (!input.trim() || isTyping) return;
+              const userMsg = { role: 'user', text: input };
+              setMessages(prev => [...prev, userMsg]);
+              setInput('');
+              setIsTyping(true);
+              const santaReply = await getSantaResponse(process.env.API_KEY, messages, input);
+              setMessages(prev => [...prev, { role: 'model', text: santaReply }]);
+              setIsTyping(false);
+          };
+          return (
+              <div className={`fixed inset-y-0 right-0 w-full md:w-96 bg-[#0f172a]/95 backdrop-blur-xl border-l border-white/10 z-[100] transform transition-transform duration-300 ease-in-out shadow-2xl flex flex-col ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+                   <div className="p-4 bg-red-800/80 flex items-center justify-between border-b border-white/10 shadow-lg">
+                       <div className="flex items-center gap-3">
+                           <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center overflow-hidden border-2 border-yellow-400">
+                               <div className="relative w-full h-full bg-red-600">
+                                    <div className="absolute top-2 left-1/2 -translate-x-1/2 w-6 h-4 bg-[#ffe0bd] rounded-full"></div>
+                                    <div className="absolute bottom-0 w-full h-4 bg-white"></div>
+                               </div>
+                           </div>
+                           <div>
+                               <h3 className="font-bold text-white text-lg font-display">Santa Claus</h3>
+                               <div className="flex items-center gap-1 text-xs text-green-300"><span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span> Online @North Pole</div>
+                           </div>
+                       </div>
+                       <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X className="text-white" /></button>
+                   </div>
+                   <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                       {messages.map((msg, idx) => (
+                           <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                               <div className={`max-w-[80%] p-3 rounded-2xl text-sm md:text-base ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white text-slate-800 rounded-tl-none border-2 border-red-100'} shadow-md`}>{msg.text}</div>
+                           </div>
+                       ))}
+                       {isTyping && <div className="flex justify-start"><div className="bg-white/50 p-3 rounded-2xl rounded-tl-none flex gap-1"><div className="w-2 h-2 bg-slate-500 rounded-full animate-bounce"></div><div className="w-2 h-2 bg-slate-500 rounded-full animate-bounce delay-75"></div><div className="w-2 h-2 bg-slate-500 rounded-full animate-bounce delay-150"></div></div></div>}
+                       <div ref={messagesEndRef} />
+                   </div>
+                   <div className="p-4 bg-slate-900/50 border-t border-white/10">
+                       <div className="flex gap-2">
+                           <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} placeholder="ถามซานต้า..." className="flex-1 bg-slate-800 border border-slate-700 text-white rounded-full px-4 py-2 focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 placeholder-slate-400" disabled={isTyping} />
+                           <button onClick={handleSend} disabled={isTyping || !input.trim()} className="p-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-full shadow-lg transition-all"><Send size={20} /></button>
+                       </div>
+                   </div>
+              </div>
+          );
+      };
+      const ChristmasInfoModal = ({ onClose }) => {
+          const [activeTab, setActiveTab] = useState('general');
+          return (
+              <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+                  <div className="absolute inset-0 bg-black/70 backdrop-blur-md animate-fade-in" onClick={onClose}></div>
+                  <div className="relative w-full max-w-2xl bg-[#0f172a] border border-white/20 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-pop-up">
+                      <div className="relative p-6 bg-gradient-to-r from-red-900 to-red-800 border-b border-white/10 shrink-0">
+                          <div className="absolute top-0 right-0 p-4 opacity-20"><Snowflake size={120} /></div>
+                          <div className="flex items-center justify-between relative z-10 mb-4">
+                              <div className="flex items-center gap-3">
+                                  <div className="p-3 bg-white/10 rounded-2xl border border-white/20 backdrop-blur-sm shadow-lg"><BookOpen size={32} className="text-xmas-gold" /></div>
+                                  <div><h2 className="text-3xl font-display font-bold text-white drop-shadow-md">เกร็ดความรู้คริสต์มาส</h2><p className="text-sm text-red-200">เรื่องราวน่ารู้ เทศกาลแห่งความสุข</p></div>
+                              </div>
+                              <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-full transition-colors text-white"><X size={28} /></button>
+                          </div>
+                          <div className="flex gap-2 relative z-10">
+                              <button onClick={() => setActiveTab('general')} className={`flex-1 py-2 px-4 rounded-xl font-bold text-sm transition-all ${activeTab === 'general' ? 'bg-white text-red-900 shadow-md' : 'bg-black/20 text-red-100 hover:bg-black/30'}`}>ประวัติ & ความหมาย</button>
+                              <button onClick={() => setActiveTab('facts')} className={`flex-1 py-2 px-4 rounded-xl font-bold text-sm transition-all ${activeTab === 'facts' ? 'bg-white text-red-900 shadow-md' : 'bg-black/20 text-red-100 hover:bg-black/30'}`}>5 เรื่องจริงสุดเซอร์ไพรส์</button>
+                          </div>
+                      </div>
+                      <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 scrollbar-hide text-slate-200">
+                          {activeTab === 'general' && (
+                              <div className="space-y-8 animate-fade-in">
+                                  <div className="p-6 bg-blue-900/30 rounded-2xl border border-blue-500/20 italic text-center text-blue-200 relative">
+                                      <Sparkles className="absolute top-2 left-2 text-yellow-400 opacity-60" size={20} />"คริสต์มาสไม่ใช่แค่ช่วงเวลา... แต่มันคือความรู้สึก"<Sparkles className="absolute bottom-2 right-2 text-yellow-400 opacity-60" size={20} />
+                                  </div>
+                                  <section className="space-y-3">
+                                      <h3 className="flex items-center gap-2 text-xl font-bold text-xmas-gold border-b border-white/10 pb-2"><History size={24} className="text-red-400" /> 1. กำเนิดและที่มา (Origin)</h3>
+                                      <p className="leading-relaxed font-light">คำว่า <strong className="text-white">Christmas</strong> มาจากภาษาอังกฤษโบราณ <em className="text-yellow-200">"Cristes Maesse"</em> หมายถึง "พิธีมิสซาของพระคริสต์" เป็นวันเฉลิมฉลองการประสูติของ <strong className="text-white">พระเยซูคริสต์</strong> ศาสดาของศาสนาคริสต์ ซึ่งตรงกับวันที่ 25 ธันวาคมของทุกปี</p>
+                                      <div className="bg-white/5 p-4 rounded-xl text-sm border-l-4 border-yellow-500"><strong>รู้หรือไม่?</strong> ในพระคัมภีร์ไม่ได้ระบุวันที่ 25 ธ.ค. ไว้ชัดเจน แต่คริสตจักรเลือกวันนี้เพื่อให้สอดคล้องกับเทศกาลเฉลิมฉลองแสงสว่างในฤดูหนาว (Winter Solstice) ของชาวโรมันโบราณ เพื่อให้ง่ายต่อการเผยแผ่ศาสนา</div>
+                                  </section>
+                                  <section className="space-y-3">
+                                      <h3 className="flex items-center gap-2 text-xl font-bold text-xmas-gold border-b border-white/10 pb-2"><User size={24} className="text-red-400" /> 2. ตำนานซานตาคลอส (Santa Claus)</h3>
+                                      <p className="leading-relaxed font-light">ซานตาคลอสมีต้นแบบมาจาก <strong className="text-white">นักบุญนิโคลัส (St. Nicholas)</strong> แห่งเมืองไมรา ผู้มีจิตใจเมตตาและชอบแอบนำเหรียญทองไปหย่อนลงในถุงเท้าของเด็กยากจน จนกลายเป็นธรรมเนียมการแขวนถุงเท้า</p>
+                                      <p className="leading-relaxed font-light text-sm text-slate-400">*ภาพจำ "ลุงอ้วนชุดแดงเคราขาว" ที่เราคุ้นตาในปัจจุบัน ได้รับอิทธิพลอย่างมากจากโฆษณาของ Coca-Cola ในปี 1931</p>
+                                  </section>
+                                  <section className="space-y-3">
+                                      <h3 className="flex items-center gap-2 text-xl font-bold text-xmas-gold border-b border-white/10 pb-2"><Palette size={24} className="text-red-400" /> 3. ความหมายของสัญลักษณ์</h3>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                          <div className="flex gap-3 bg-white/5 p-3 rounded-lg hover:bg-white/10 transition-colors"><div className="p-2 bg-green-900/50 rounded-lg h-fit"><Gift size={20} className="text-green-400" /></div><div><h4 className="font-bold text-white">ต้นคริสต์มาส</h4><p className="text-sm text-slate-300">สื่อถึง "ชีวิตนิรันดร์" เพราะเป็นไม้ที่ไม่ผลัดใบในหน้าหนาว</p></div></div>
+                                          <div className="flex gap-3 bg-white/5 p-3 rounded-lg hover:bg-white/10 transition-colors"><div className="p-2 bg-yellow-900/50 rounded-lg h-fit"><Star size={20} className="text-yellow-400" /></div><div><h4 className="font-bold text-white">ดาว</h4><p className="text-sm text-slate-300">ตัวแทนของ "ดาวแห่งเบธเลเฮม" ที่นำทางโหราจารย์ไปพบพระเยซู</p></div></div>
+                                          <div className="flex gap-3 bg-white/5 p-3 rounded-lg hover:bg-white/10 transition-colors"><div className="p-2 bg-red-900/50 rounded-lg h-fit"><Bell size={20} className="text-red-400" /></div><div><h4 className="font-bold text-white">สีแดง-เขียว</h4><p className="text-sm text-slate-300">แดง = พระโลหิต/ความรัก, เขียว = ชีวิต/ธรรมชาติ</p></div></div>
+                                          <div className="flex gap-3 bg-white/5 p-3 rounded-lg hover:bg-white/10 transition-colors"><div className="p-2 bg-blue-900/50 rounded-lg h-fit"><Globe size={20} className="text-blue-400" /></div><div><h4 className="font-bold text-white">พวงหรีด (Wreath)</h4><p className="text-sm text-slate-300">วงกลมที่ไม่มีจุดจบ สื่อถึง "ความรักที่ไม่มีที่สิ้นสุดของพระเจ้า"</p></div></div>
+                                      </div>
+                                  </section>
+                              </div>
+                          )}
+                          {activeTab === 'facts' && (
+                               <div className="space-y-8 animate-fade-in">
+                                  <div className="text-center mb-6"><h3 className="text-xl font-bold text-xmas-gold">5 เรื่องจริงสุดเซอร์ไพรส์</h3><p className="text-sm text-slate-400">ที่คุณอาจไม่เคยรู้มาก่อน</p></div>
+                                  <div className="bg-white/5 p-5 rounded-2xl border border-white/10"><h4 className="font-bold text-lg text-red-300 mb-2 flex items-center gap-2"><Calendar size={20} /> 1. วันที่ 25 ธันวาคม มาจากไหน?</h4><p className="text-sm leading-relaxed text-slate-300">ทฤษฎีหนึ่งเชื่อว่าคริสตจักรเลือกวันนี้เพื่อทับซ้อนกับเทศกาล <strong>Saturnalia</strong> ของชาวโรมัน และวันเกิดของเทพสุริยัน (Sol Invictus) เพื่อให้การเปลี่ยนศาสนาของคนในยุคนั้นทำได้ง่ายขึ้น</p></div>
+                                  <div className="bg-white/5 p-5 rounded-2xl border border-white/10"><h4 className="font-bold text-lg text-green-300 mb-2 flex items-center gap-2"><Zap size={20} /> 2. ธรรมเนียม "นอกรีต" ที่เคยถูกแบน</h4><p className="text-sm leading-relaxed text-slate-300"><strong>มิสเซิลโท</strong> เคยเป็นพืชศักดิ์สิทธิ์ของพวกเพเกิน และถูกห้ามใช้ในโบสถ์ช่วงแรก นอกจากนี้ยังมี "เทศกาลคนโง่" ที่ล้อเลียนพิธีกรรมทางศาสนา ซึ่งคริสตจักรต้องใช้เวลาหลายศตวรรษในการปราบปราม</p></div>
+                                   <div className="bg-white/5 p-5 rounded-2xl border border-white/10"><h4 className="font-bold text-lg text-yellow-300 mb-2 flex items-center gap-2"><Award size={20} /> 3. ต้นคริสต์มาส ดังได้เพราะ "อินฟลูเอนเซอร์"</h4><p className="text-sm leading-relaxed text-slate-300">ต้นคริสต์มาสเริ่มในเยอรมนี แต่โด่งดังไปทั่วโลกเพราะ <strong>พระราชินีวิกตอเรีย</strong> และเจ้าชายอัลเบิร์ตแห่งอังกฤษ เมื่อภาพราชวงศ์ฉลองรอบต้นคริสต์มาสถูกเผยแพร่ในปี 1848 ก็กลายเป็นกระแสไวรัลทันที</p></div>
+                                  <div className="bg-white/5 p-5 rounded-2xl border border-white/10"><h4 className="font-bold text-lg text-blue-300 mb-2 flex items-center gap-2"><User size={20} /> 4. ซานตาคลอส ผ่านการ "รีแบรนด์" มานับครั้งไม่ถ้วน</h4><p className="text-sm leading-relaxed text-slate-300">นักบุญนิโคลัสตัวจริงผอมสูง! ภาพจำ "ลุงอ้วนชุดแดงใจดี" ที่เราเห็นปัจจุบัน ถูกสร้างและตอกย้ำโดยนักวาดการ์ตูน Thomas Nast และโฆษณาของ <strong>Coca-Cola</strong> ในช่วงทศวรรษ 1930</p></div>
+                                   <div className="bg-white/5 p-5 rounded-2xl border border-white/10"><h4 className="font-bold text-lg text-purple-300 mb-2 flex items-center gap-2"><Coins size={20} /> 5. จากศาสนา สู่ปรากฏการณ์เศรษฐกิจ</h4><p className="text-sm leading-relaxed text-slate-300">ปัจจุบันคริสต์มาสกลายเป็นช่วงเวลาสำคัญที่สุดของธุรกิจค้าปลีกทั่วโลก แม้แต่ในประเทศไทยที่ไม่ใช่วันหยุดราชการ การประดับไฟตามห้างฯ ก็กลายเป็นแลนด์มาร์คสำคัญทางวัฒนธรรมไปแล้ว</p></div>
+                              </div>
+                          )}
+                      </div>
+                      <div className="p-4 bg-[#0B1026] border-t border-white/10 text-[10px] text-slate-500 flex justify-between items-center shrink-0">
+                          <span className="uppercase tracking-widest font-bold">References / แหล่งอ้างอิง</span>
+                          <div className="flex gap-4">
+                              <a href="https://www.britannica.com/topic/Christmas" target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-white transition-colors">Britannica <ExternalLink size={10} /></a>
+                              <a href="https://www.history.com/topics/christmas" target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-white transition-colors">History.com <ExternalLink size={10} /></a>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          );
+      };
+
+      const ChevronForwardWrapper = () => <ChevronUp className="rotate-90 text-white/50" />;
+      const TOTAL_TIME = 30;
+      const HINT_PENALTY = 5;
+      const INITIAL_SKIPS = 3;
+
+      const App = () => {
+        const [gameState, setGameState] = useState({
+          status: 'menu',
+          score: 0,
+          currentLevel: 1,
+          timeLeft: TOTAL_TIME,
+          skipsLeft: INITIAL_SKIPS
+        });
+        
+        const [question, setQuestion] = useState(null);
+        const [maskedWord, setMaskedWord] = useState([]);
+        const [userInput, setUserInput] = useState('');
+        const [isWrongAnimation, setIsWrongAnimation] = useState(false);
+        const [isLoading, setIsLoading] = useState(false);
+        const [isPlayingCutscene, setIsPlayingCutscene] = useState(false);
+        const [showSantaPopup, setShowSantaPopup] = useState(false);
+        const [showInfoModal, setShowInfoModal] = useState(false);
+        const [usedWords, setUsedWords] = useState([]);
+        const [isHintLoading, setIsHintLoading] = useState(false);
+        const [isChatOpen, setIsChatOpen] = useState(false);
+        const [isMuted, setIsMuted] = useState(false);
+        const [bgmIndex, setBgmIndex] = useState(() => Math.floor(Math.random() * AUDIO_CONFIG.bgm.length));
+        
+        const bgmRef = useRef(null);
+        const sfxRef = useRef(null);
+        const inputRef = useRef(null);
+        const timerRef = useRef(null);
+
+        const canAffordHint = gameState.timeLeft > HINT_PENALTY;
+        const canSkip = gameState.skipsLeft > 0;
+
+        const toggleMute = () => setIsMuted(prev => !prev);
+
+        useEffect(() => {
+          if (bgmRef.current) {
+              bgmRef.current.muted = isMuted;
+              bgmRef.current.volume = 0.3;
+          }
+          if (sfxRef.current) {
+              sfxRef.current.muted = isMuted;
+              sfxRef.current.volume = 0.8;
+          }
+        }, [isMuted]);
+
+        useEffect(() => {
+          if (bgmRef.current && gameState.status !== 'menu') {
+              bgmRef.current.load();
+              bgmRef.current.play().catch(e => console.log("Autoplay blocked waiting for interaction"));
+          }
+        }, [bgmIndex, gameState.status]);
+
+        const handleNextSong = () => setBgmIndex(prev => (prev + 1) % AUDIO_CONFIG.bgm.length);
+
+        const prepareLevel = useCallback(async (isReset = false) => {
+          setIsLoading(true);
+          const newQ = await generateQuestion(process.env.API_KEY, isReset ? [] : usedWords);
+          
+          if (newQ === null) {
+               setGameState(prev => ({ ...prev, status: 'completed' }));
+               setIsLoading(false);
+               if (sfxRef.current) {
+                  sfxRef.current.currentTime = 0;
+                  sfxRef.current.play().catch(e => console.log("SFX play failed"));
+               }
+               return;
+          }
+
+          setQuestion(newQ);
+          setUsedWords(prev => isReset ? [newQ.answer] : [...prev, newQ.answer]);
+          const chars = newQ.answer.split('');
+          const len = chars.length;
+          const revealCount = Math.max(1, Math.floor(len * 0.35)); 
+          const indicesToReveal = new Set();
+          while (indicesToReveal.size < revealCount) indicesToReveal.add(Math.floor(Math.random() * len));
+          const masked = chars.map((char, index) => ({ char, isVisible: indicesToReveal.has(index), isSpace: char === ' ' }));
+          setMaskedWord(masked);
+          setUserInput('');
+          setIsLoading(false);
+
+          if (isReset) {
+              setIsPlayingCutscene(true);
+          } else {
+              setGameState(prev => ({
+                  ...prev,
+                  status: 'playing',
+                  score: prev.score,
+                  currentLevel: prev.currentLevel + 1,
+                  timeLeft: Math.max(15, TOTAL_TIME - Math.floor(prev.currentLevel * 0.3)), 
+                  skipsLeft: prev.skipsLeft
+              }));
+              setTimeout(() => inputRef.current?.focus(), 100);
+          }
+        }, [usedWords]);
+
+        const handleStart = () => {
+          if (bgmRef.current) bgmRef.current.play().catch(e => console.log("Audio play failed", e));
+          setUsedWords([]);
+          prepareLevel(true);
+        };
+        const onCutsceneComplete = () => {
+            setIsPlayingCutscene(false);
+            setGameState(prev => ({ ...prev, status: 'playing', score: 0, currentLevel: 1, timeLeft: TOTAL_TIME, skipsLeft: INITIAL_SKIPS }));
+            setTimeout(() => inputRef.current?.focus(), 100);
+        };
+        const handleNextLevel = () => { setShowSantaPopup(false); prepareLevel(false); };
+        const handleBackToMenu = () => {
+           setGameState({ status: 'menu', score: 0, currentLevel: 1, timeLeft: TOTAL_TIME, skipsLeft: INITIAL_SKIPS });
+           setUsedWords([]);
+        };
+        const handleSkip = () => {
+          if (gameState.status !== 'playing' || gameState.skipsLeft <= 0 || isLoading) return;
+          setGameState(prev => ({ ...prev, skipsLeft: prev.skipsLeft - 1 }));
+          prepareLevel(false);
+        };
+        const handleGameOver = useCallback(() => setGameState(prev => ({ ...prev, status: 'gameover' })), []);
+
+        const handleRequestHint = async () => {
+          if (gameState.status !== 'playing' || isHintLoading || !question || gameState.timeLeft <= HINT_PENALTY) return;
+          const hiddenIndices = maskedWord.map((item, index) => (!item.isVisible && !item.isSpace ? index : -1)).filter(index => index !== -1);
+          if (hiddenIndices.length > 0) {
+              const randomIndex = hiddenIndices[Math.floor(Math.random() * hiddenIndices.length)];
+              setMaskedWord(prev => {
+                  const newMask = [...prev];
+                  newMask[randomIndex] = { ...newMask[randomIndex], isVisible: true };
+                  return newMask;
+              });
+          }
+          setIsHintLoading(true);
+          setGameState(prev => ({ ...prev, timeLeft: Math.max(0, prev.timeLeft - HINT_PENALTY) }));
+          try {
+              const dynamicHint = await generateSantaHint(process.env.API_KEY, question.answer, question.category);
+              setQuestion(prev => prev ? ({ ...prev, hint: dynamicHint }) : null);
+              if (sfxRef.current) {
+                   sfxRef.current.currentTime = 0;
+                   sfxRef.current.play().catch(e => console.log("SFX play failed"));
+              }
+          } catch (error) { console.error("Failed to generate hint", error); } finally { setIsHintLoading(false); inputRef.current?.focus(); }
+        };
+
+        const handleInputChange = (e) => {
+          if (gameState.status !== 'playing' || !question) return;
+          const rawInput = e.target.value;
+          if (rawInput.length <= question.answer.length) setUserInput(rawInput);
+          if (rawInput === question.answer) {
+              if (sfxRef.current) { sfxRef.current.currentTime = 0; sfxRef.current.play().catch(e => console.log("SFX play failed")); }
+              setGameState(prev => ({ ...prev, score: prev.score + 10, status: 'victory' }));
+              setShowSantaPopup(true);
+              setTimeout(() => setShowSantaPopup(false), 3000);
+          } else if (rawInput.length === question.answer.length) {
+              setIsWrongAnimation(true);
+              setTimeout(() => setIsWrongAnimation(false), 500);
+          }
+        };
+
+        useEffect(() => {
+          const handleGlobalKeyDown = (e) => {
+            if (isChatOpen || showInfoModal) return;
+            if (gameState.status === 'victory' && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); handleNextLevel(); }
+          };
+          window.addEventListener('keydown', handleGlobalKeyDown);
+          return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+        }, [gameState.status, handleNextLevel, isChatOpen, showInfoModal]);
+
+        useEffect(() => {
+          if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+          if (gameState.status === 'playing') {
+            timerRef.current = window.setInterval(() => {
+              setGameState(prev => {
+                if (prev.status !== 'playing') { if (timerRef.current) clearInterval(timerRef.current); return prev; }
+                if (prev.timeLeft <= 1) { if (timerRef.current) clearInterval(timerRef.current); handleGameOver(); return { ...prev, timeLeft: 0 }; }
+                return { ...prev, timeLeft: prev.timeLeft - 1 };
+              });
+            }, 1000);
+          }
+          return () => { if (timerRef.current) clearInterval(timerRef.current); };
+        }, [gameState.status, handleGameOver]);
+
+        useEffect(() => {
+          if (gameState.status === 'playing' && !isChatOpen && !showInfoModal) {
+              const interval = setInterval(() => { if (document.activeElement !== inputRef.current) inputRef.current?.focus(); }, 1000);
+              return () => clearInterval(interval);
+          }
+        }, [gameState.status, isChatOpen, showInfoModal]);
+
+        return (
+          <div className={`min-h-screen w-full font-sans overflow-hidden flex flex-col items-center relative select-none`}>
+            <audio ref={bgmRef} src={AUDIO_CONFIG.bgm[bgmIndex]} onEnded={handleNextSong} loop={false} />
+            <audio ref={sfxRef} src={AUDIO_CONFIG.sfx.santa} />
+            <ScenicBackground />
+            <button onClick={toggleMute} className="fixed top-4 left-4 z-[60] p-3 rounded-full bg-black/30 backdrop-blur text-white hover:bg-black/50 transition-colors">
+              {isMuted ? <VolumeX size={24} /> : <Volume2 size={24} />}
+            </button>
+            <button onClick={() => setIsChatOpen(true)} className="fixed top-1/2 right-0 z-[60] p-4 bg-red-600 rounded-l-2xl shadow-xl hover:bg-red-500 hover:pr-6 transition-all transform hover:scale-105 group border-2 border-r-0 border-white/20">
+              <div className="flex flex-col items-center gap-1">
+                  <div className="relative"><MessageCircle size={32} className="text-white fill-current" /><div className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full animate-pulse border border-red-600"></div></div>
+                  <span className="text-[10px] font-bold text-white uppercase writing-vertical hidden md:block">Chat</span>
+              </div>
+            </button>
+            <SantaChat isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
+            {showInfoModal && <ChristmasInfoModal onClose={() => setShowInfoModal(false)} />}
+            {isPlayingCutscene && <CutsceneOverlay onComplete={onCutsceneComplete} />}
+            {showSantaPopup && !gameState.status.includes('completed') && <VictorySanta />}
+            {gameState.status === 'completed' && <GameCompletedView onBackToMenu={handleBackToMenu} />}
+            {gameState.status !== 'completed' && (
+              <main className={`flex-grow flex flex-col items-center justify-center p-4 relative z-40 w-full max-w-4xl transition-all duration-500 ${isPlayingCutscene ? 'opacity-0' : 'opacity-100'} overflow-y-auto pb-20`}>
+                  {(gameState.status === 'playing' || gameState.status === 'victory' || gameState.status === 'gameover') && (
+                      <div className="w-full flex justify-between items-center mb-6 px-4 z-50">
+                          <div className="glass-card px-4 py-2 rounded-xl flex flex-col items-center transform -rotate-2 border-b-4 border-xmas-red"><span className="text-xmas-gold text-xs uppercase font-bold tracking-wider">คะแนน</span><span className="text-3xl font-bold text-white drop-shadow-md">{gameState.score}</span></div>
+                          <div className="glass-card px-4 py-2 rounded-xl flex flex-col items-center transform rotate-2 border-b-4 border-xmas-green"><span className="text-xmas-gold text-xs uppercase font-bold tracking-wider">ด่านที่</span><span className="text-3xl font-bold text-white drop-shadow-md">{gameState.currentLevel}</span></div>
+                      </div>
+                  )}
+                  {gameState.status === 'menu' && !isLoading && !isPlayingCutscene && (
+                      <>
+                      <div className="relative glass-card p-8 md:p-12 rounded-3xl text-center max-w-md w-full mx-auto animate-float">
+                          <h1 className="font-display text-6xl text-xmas-gold drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] mb-2">Christmas</h1>
+                          <h2 className="text-3xl font-bold text-white mb-6 drop-shadow-md tracking-wide">Word Hunt</h2>
+                          <p className="text-slate-200 mb-8 font-light text-sm md:text-base leading-relaxed">ทายคำศัพท์ต้อนรับวันคริสต์มาส<br/>ท่ามกลางแสงจันทร์และหิมะ</p>
+                          <button onClick={handleStart} className="w-full group relative px-8 py-4 bg-gradient-to-br from-xmas-red to-red-700 text-white text-xl font-bold rounded-full shadow-lg border border-red-400/30 hover:scale-105 transition-all duration-300">
+                          <span className="flex items-center justify-center gap-2 drop-shadow-md"><Play fill="white" size={20} /> เริ่มเกม</span><div className="absolute inset-0 rounded-full bg-white/20 blur-md opacity-0 group-hover:opacity-100 transition-opacity"></div></button>
+                          <div className="mt-6 text-[10px] text-slate-400 uppercase tracking-widest">Powered by Google Gemini</div>
+                      </div>
+                      <div className="w-full max-w-md mx-auto mt-6 z-50">
+                          <button onClick={() => setShowInfoModal(true)} className="w-full glass-card p-4 rounded-2xl flex items-center justify-between text-left group hover:bg-white/10 transition-colors border border-xmas-gold/30 hover:border-xmas-gold shadow-lg">
+                              <div className="flex items-center gap-3"><div className="p-3 bg-xmas-red/20 rounded-full border border-xmas-red/30"><BookOpen size={24} className="text-xmas-gold" /></div><div><h3 className="font-bold text-white text-sm md:text-base">เกร็ดความรู้: วันคริสต์มาส</h3><p className="text-[10px] md:text-xs text-slate-300 group-hover:text-xmas-gold transition-colors">ประวัติ, ความหมาย และเรื่องที่คุณอาจไม่เคยรู้</p></div></div>
+                              <ChevronForwardWrapper />
+                          </button>
+                      </div>
+                      </>
+                  )}
+                  {isLoading && !isPlayingCutscene && <div className="glass-card p-8 rounded-full flex flex-col items-center animate-pulse"><Snowflake className="text-white w-12 h-12 animate-spin-slow mb-2" /><p className="text-xmas-gold font-bold">กำลังโหลด...</p></div>}
+                  {!isLoading && gameState.status !== 'menu' && question && (
+                  <div className="w-full flex flex-col items-center relative z-50">
+                      <div className="mb-2 px-6 py-1 bg-white/90 backdrop-blur text-xmas-red rounded-full shadow-lg transform -rotate-1 border border-xmas-red/20"><span className="text-lg font-bold">หมวด: {question.category}</span></div>
+                      {gameState.status === 'playing' && <div className="mb-4 scale-90 md:scale-100"><Timer timeLeft={gameState.timeLeft} totalTime={Math.max(15, TOTAL_TIME - Math.floor(gameState.currentLevel * 0.3))} /></div>}
+                      <div className="w-full px-2 mb-2"><LetterDisplay maskedWord={maskedWord} userInput={userInput} isWrong={isWrongAnimation} status={gameState.status} /></div>
+                      <div className="glass-card px-6 py-4 rounded-2xl mb-6 mx-4 max-w-xl w-full text-center relative border-l-4 border-l-xmas-gold min-h-[5rem] flex items-center justify-center">
+                          {isHintLoading ? <div className="flex gap-2 items-center text-white"><div className="w-2 h-2 bg-white rounded-full animate-bounce"></div><div className="w-2 h-2 bg-white rounded-full animate-bounce delay-75"></div><div className="w-2 h-2 bg-white rounded-full animate-bounce delay-150"></div><span className="text-sm ml-2">ซานต้ากำลังคิด...</span></div> : <p className="text-xl md:text-2xl text-white font-medium drop-shadow-md animate-fade-in">"{question.hint}"</p>}
+                      </div>
+                      {gameState.status === 'playing' && (
+                          <div className="flex gap-4">
+                              <button onClick={handleRequestHint} disabled={!canAffordHint || isHintLoading} className={`px-5 py-3 rounded-xl font-bold text-sm md:text-base flex items-center gap-2 shadow-lg transition-all ${canAffordHint && !isHintLoading ? 'bg-xmas-gold text-red-900 hover:brightness-110 active:scale-95' : 'bg-slate-700/50 text-slate-400 cursor-not-allowed'}`}><Lightbulb size={18} /> ตัวช่วย (-{HINT_PENALTY}วิ)</button>
+                              <button onClick={handleSkip} disabled={!canSkip} className={`px-5 py-3 rounded-xl font-bold text-sm md:text-base flex items-center gap-2 shadow-lg transition-all ${canSkip ? 'bg-white text-xmas-green hover:brightness-110 active:scale-95' : 'bg-slate-700/50 text-slate-400 cursor-not-allowed'}`}><SkipForward size={18} /> ข้าม ({gameState.skipsLeft})</button>
+                          </div>
+                      )}
+                      {gameState.status === 'victory' && <div className="glass-card p-8 rounded-3xl text-center animate-bounce-in border-2 border-xmas-green/50"><h2 className="text-4xl font-bold text-xmas-green mb-2 drop-shadow-md">ถูกต้อง!</h2><button onClick={handleNextLevel} className="mt-4 px-8 py-3 bg-xmas-green text-white rounded-xl font-bold shadow-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 w-full">ไปข้อต่อไป <Play size={18} fill="white" /></button></div>}
+                      {gameState.status === 'gameover' && <div className="glass-card p-8 rounded-3xl text-center animate-fade-in-up border-2 border-xmas-red/50"><Bell className="w-16 h-16 text-xmas-red mx-auto mb-4 animate-shake" /><h2 className="text-4xl font-bold text-xmas-red mb-2">หมดเวลา!</h2><p className="text-slate-300 mb-6">เฉลย: <span className="text-xmas-gold font-bold text-2xl">{question.answer}</span></p><button onClick={handleBackToMenu} className="w-full px-8 py-3 bg-xmas-red text-white rounded-xl font-bold shadow-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2"><RefreshCw size={18} /> เริ่มเกมใหม่</button></div>}
+                      <input ref={inputRef} type="text" value={userInput} onChange={handleInputChange} className="opacity-0 absolute top-0 left-0 h-0 w-0" autoComplete="off" disabled={gameState.status !== 'playing' || isChatOpen || showInfoModal} />
+                      {gameState.status === 'playing' && !isChatOpen && !showInfoModal && <div onClick={() => inputRef.current?.focus()} className="mt-8 text-white/50 bg-black/20 px-6 py-2 rounded-full text-xs cursor-pointer md:hidden backdrop-blur-sm">แตะเพื่อพิมพ์</div>}
+                  </div>
+                  )}
+              </main>
+            )}
+            <footer className="w-full p-4 text-center text-white/20 text-[10px] z-50 font-bold fixed bottom-0 pointer-events-none">Christmas Word Hunt • Created with ❤️ & Google Gemini</footer>
+          </div>
+        );
+      };
+
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(<App />);
+    </script>
+  </head>
   <body>
     <div id="root"></div>
     <div class="snowflakes" aria-hidden="true">
-      <div class="snowflake">❅</div>
-      <div class="snowflake">❆</div>
-      <div class="snowflake">❅</div>
-      <div class="snowflake">❆</div>
-      <div class="snowflake">❅</div>
-      <div class="snowflake">❆</div>
-      <div class="snowflake">❅</div>
-      <div class="snowflake">❆</div>
-      <div class="snowflake">❅</div>
-      <div class="snowflake">❆</div>
+      <div class="snowflake">❅</div><div class="snowflake">❆</div><div class="snowflake">❅</div><div class="snowflake">❆</div><div class="snowflake">❅</div><div class="snowflake">❆</div><div class="snowflake">❅</div><div class="snowflake">❆</div><div class="snowflake">❅</div><div class="snowflake">❆</div>
     </div>
   </body>
 </html>
